@@ -1,0 +1,5 @@
+{
+  "name": "RBAC Self-Service Portal",
+  "description": "A self-service portal to manage Role-Based Access Control (RBAC) with roles, attributes, default assignments, and exception handling.",
+  "requestFramePermissions": []
+}

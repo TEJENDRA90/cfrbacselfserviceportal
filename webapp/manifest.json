@@ -1,0 +1,44 @@
+{
+    "_version": "1.12.0",
+    "sap.app": {
+        "id": "rbacSelfServicePortal",
+        "type": "application",
+        "applicationVersion": {
+            "version": "1.0.0"
+        },
+        "title": "rbacSelfServicePortal",
+        "description": "rbacSelfServicePortal",
+        "sourceTemplate": {
+            "id": "@sap/generator-fiori:basic",
+            "version": "1.8.3",
+            "toolsId": "bf095488-68de-49ee-9e1c-6710c26b5fc5"
+        },
+        "crossNavigation": {
+            "inbounds": {
+                "cwf-performancereport-inbound": {
+                    "signature": {
+                        "parameters": {},
+                        "additionalParameters": "allowed"
+                    },
+                    "semanticObject": "rbacSelfServicePortal",
+                    "action": "Display",
+                    "title": "ddd",
+                    "subTitle": "aaa",
+                    "icon": ""
+                }
+            }
+        }
+    },
+    "sap.ui": {
+        "technology": "URL",
+        "deviceTypes": {
+            "desktop": true,
+            "phone": true,
+            "tablet": true
+        }
+    },
+    "sap.cloud": {
+        "public": true,
+        "service": "rbacSelfServicePortal"
+    }
+}
