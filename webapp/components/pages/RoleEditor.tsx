@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, Button } from '../shared';
 import { ATTRIBUTES, ATTRIBUTE_VALUES, APP_LIST } from '../../../constants';
 import type { Role, Attribute, Action } from '../../../types';
+import apiService from '../../lib/service';
 
 const DAY_TYPE_OPTIONS = ["All", "W", "W1", "W-am", "W-pm", "WX", "V", "DO", "T", "TH", "X", "F", "NA"];
 
@@ -28,10 +29,71 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
       };
       return newRole;
     }
-    return roles.find(r => r.id === roleId);
+    
+    return roles.find(r => (r.roleId || r.id) === roleId);
   }, [roleId, isNewRole, roles]);
   
   const [formData, setFormData] = useState<Role | undefined>(initialRole);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Transform API role data to form format
+  const transformApiRoleToForm = (apiRole: any): Role => {
+    // Transform functionality access from API format to form format
+    const getFunctionalityText = (access: string) => {
+      switch (access) {
+        case 'B': return 'Both';
+        case 'P': return 'Planning View';
+        case 'S': return 'Scheduling View';
+        default: return 'Both';
+      }
+    };
+
+    // Transform permissions from API format to form format
+    const transformedPermissions = ATTRIBUTES.map(attr => {
+      const apiPermission = apiRole.permissions?.find((p: any) => 
+        p.attribute?.toLowerCase() === attr.toLowerCase()
+      );
+      return {
+        attribute: attr,
+        values: apiPermission?.value || []
+      };
+    });
+
+    // Transform app access from API format to form format
+    const transformedAppAccess = apiRole.appAccess?.map((app: any) => ({
+      appName: app.APP_ID || app.appId,
+      actions: [
+        ...(app.CAN_READ || app.read ? ['Read'] : []),
+        ...(app.CAN_WRITE || app.write ? ['Write'] : [])
+      ]
+    })) || [];
+
+    return {
+      id: apiRole.roleId || apiRole.id || '',
+      name: apiRole.name || '',
+      description: apiRole.description || '',
+      permissions: transformedPermissions,
+      writeRestrictionDays: apiRole.writeRestrictionDays,
+      functionalityAccess: getFunctionalityText(apiRole.functionalityAccess),
+      dayTypeAccess: apiRole.dayTypeAccess || ['All'],
+      appAccess: transformedAppAccess
+    };
+  };
+
+  // Update form data when initial role changes (for editing different roles)
+  React.useEffect(() => {
+    if (initialRole) {
+      // If it's an API role (has roleId), transform it to form format
+      if (initialRole.roleId || (initialRole as any).permissions?.some((p: any) => p.value)) {
+        const transformedRole = transformApiRoleToForm(initialRole);
+        setFormData(transformedRole);
+      } else {
+        // If it's already in form format, use as is
+        setFormData(initialRole);
+      }
+    }
+  }, [initialRole]);
 
   const handleMultiSelectChange = (attribute: Attribute, values: string[]) => {
     if (!formData) return;
@@ -61,7 +123,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
       
       appConfig.actions = actions;
 
-      if (appConfig.actions.length > 0) {
+      if (appConfig.actions && appConfig.actions.length > 0) {
         newAppAccess[appIndex] = appConfig;
       } else {
         // No actions left, remove the app from access list
@@ -72,7 +134,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
     }
 
     const updatedData: Partial<Role> = { appAccess: newAppAccess };
-    if (!newAppAccess.some(a => a.actions.includes('Write'))) {
+    if (!newAppAccess.some(a => a.actions?.includes('Write'))) {
       updatedData.writeRestrictionDays = undefined;
     }
 
@@ -96,15 +158,95 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Transform form data to API payload structure
+  const transformToApiPayload = (role: Role) => {
+    // Transform functionality access to API format
+    const getFunctionalityCode = (access: string) => {
+      switch (access) {
+        case 'Both': return 'B';
+        case 'Planning View': return 'P';
+        case 'Scheduling View': return 'S';
+        default: return 'B';
+      }
+    };
+
+    // Transform app access to API format
+    const transformedAppAccess = role.appAccess?.map(app => ({
+      appId: app.appName, // Assuming appName maps to appId
+      read: app.actions?.includes('Read') || false,
+      write: app.actions?.includes('Write') || false
+    })) || [];
+
+    // Transform permissions to API format
+    const transformedPermissions = role.permissions
+      .filter(p => p.values.length > 0) // Only include permissions with values
+      .map(p => ({
+        attribute: p.attribute.toLowerCase(), // Convert to lowercase as per API
+        value: p.values
+      }));
+
+    return {
+      name: role.name,
+      description: role.description,
+      writeRestrictionDays: role.writeRestrictionDays,
+      functionalityAccess: getFunctionalityCode(role.functionalityAccess || 'Both'),
+      dayTypeAccess: role.dayTypeAccess || [],
+      permissions: transformedPermissions,
+      appAccess: transformedAppAccess
+    };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData) return;
-    if (isNewRole) {
-      setRoles(prevRoles => [...prevRoles, { ...formData, id: `role-${Date.now()}` }]);
-    } else {
-      setRoles(prevRoles => prevRoles.map(r => r.id === roleId ? formData : r));
+
+    // Basic validation
+    if (!formData.name.trim()) {
+      setError('Role name is required');
+      return;
     }
-    navigate('/roles');
+    if (!formData.description.trim()) {
+      setError('Description is required');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (isNewRole) {
+        // Create new role via API
+        const payload = transformToApiPayload(formData);
+        console.log('Creating role with payload:', payload);
+        
+        const response = await apiService.post('/rbac/roles', payload);
+        console.log('Create role response:', response);
+        
+        // Add the new role to local state
+        const newRole = { ...formData, id: `role-${Date.now()}` };
+        setRoles(prevRoles => [...prevRoles, newRole]);
+      } else {
+        // Update existing role via API
+        const payload = {
+          roleId: roleId,
+          ...transformToApiPayload(formData)
+        };
+        console.log('Updating role with payload:', payload);
+        
+        const response = await apiService.put('/rbac/roles', payload);
+        console.log('Update role response:', response);
+        
+        // Update the role in local state
+        setRoles(prevRoles => prevRoles.map(r => (r.roleId || r.id) === roleId ? formData : r));
+      }
+      
+      navigate('/roles');
+    } catch (err) {
+      console.error('Error saving role:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save role');
+    } finally {
+      setLoading(false);
+    }
   };
   
   if (!formData) {
@@ -119,7 +261,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
     );
   }
 
-  const hasWriteAccess = formData.appAccess?.some(a => a.actions.includes('Write'));
+  const hasWriteAccess = formData.appAccess?.some(a => a.actions?.includes('Write')) || false;
 
   return (
     <div className="animate-fade-in">
@@ -127,6 +269,26 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{isNewRole ? "Create New Role" : `Edit Role: ${initialRole?.name}`}</h1>
       </div>
       <Card>
+        {error && (
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                  Error saving role
+                </h3>
+                <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                  {error}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="roleName" className="block text-sm font-medium text-slate-700 dark:text-gray-300">Role Name</label>
@@ -143,8 +305,8 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
               <div className="mt-2 bg-slate-100 dark:bg-gray-900/50 rounded-md border border-slate-200 dark:border-gray-700 max-h-96 overflow-y-auto">
                 {APP_LIST.map(appName => {
                   const currentAccess = formData.appAccess?.find(a => a.appName === appName);
-                  const canRead = currentAccess?.actions.includes('Read') ?? false;
-                  const canWrite = currentAccess?.actions.includes('Write') ?? false;
+                  const canRead = currentAccess?.actions?.includes('Read') ?? false;
+                  const canWrite = currentAccess?.actions?.includes('Write') ?? false;
                   return (
                     <div key={appName} className="flex justify-between items-center p-3 border-b border-slate-200 dark:border-gray-700/50 last:border-b-0">
                       <span className="font-semibold text-slate-800 dark:text-white">{appName}</span>
@@ -202,20 +364,34 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
                     id={p.attribute} 
                     multiple 
                     value={p.values}
-                    onChange={e => handleMultiSelectChange(p.attribute, Array.from(e.target.selectedOptions, option => option.value))}
+                    onChange={e => handleMultiSelectChange(p.attribute, Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))}
                     className="block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
                   >
                     <option value="All" className="font-bold text-blue-500 dark:text-blue-300">All</option>
                     <option value="Dynamic" className="font-bold text-green-600 dark:text-green-300">Dynamic</option>
-                    {ATTRIBUTE_VALUES[p.attribute].map(val => <option key={val} value={val}>{val}</option>)}
+                    {ATTRIBUTE_VALUES[p.attribute as keyof typeof ATTRIBUTE_VALUES]?.map(val => <option key={val} value={val}>{val}</option>)}
                   </select>
                 </div>
               ))}
             </div>
           </div>
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-gray-700">
-            <Button type="button" variant="secondary" onClick={() => navigate('/roles')}>Cancel</Button>
-            <Button type="submit">Save Role</Button>
+            <Button type="button" variant="secondary" onClick={() => navigate('/roles')} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                'Save Role'
+              )}
+            </Button>
           </div>
         </form>
       </Card>

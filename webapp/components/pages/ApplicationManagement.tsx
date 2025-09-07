@@ -66,7 +66,6 @@ export const ApplicationManagement: React.FC<ApplicationManagementProps> = ({
       const searchLower = searchTerm.toLowerCase();
       return (
         (app.appName?.toLowerCase() || '').includes(searchLower) ||
-        (app.appId?.toString() || '').includes(searchLower) ||
         (app.roleCollectionId?.toString() || '').includes(searchLower) ||
         (app.createdBy?.toLowerCase() || '').includes(searchLower)
       );
@@ -214,7 +213,7 @@ export const ApplicationManagement: React.FC<ApplicationManagementProps> = ({
         <div className="mb-4">
           <input
             type="text"
-            placeholder="Search by app name, app ID, or role collection ID..."
+            placeholder="Search by app name or role collection ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -268,7 +267,6 @@ export const ApplicationManagement: React.FC<ApplicationManagementProps> = ({
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 dark:bg-gray-700/50 text-xs text-slate-500 dark:text-gray-300 uppercase tracking-wider">
                 <tr>
-                  <th className="p-3">App ID</th>
                   <th className="p-3">App Name</th>
                   <th className="p-3">Role Collection ID</th>
                   <th className="p-3">Created By</th>
@@ -283,9 +281,6 @@ export const ApplicationManagement: React.FC<ApplicationManagementProps> = ({
                   return (
                     <tr key={application.appId || Math.random()} className="hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors">
                       <td className="p-3 font-medium text-slate-900 dark:text-white">
-                        {application.appId || 'N/A'}
-                      </td>
-                      <td className="p-3 text-slate-900 dark:text-white">
                         {application.appName || 'N/A'}
                       </td>
                       <td className="p-3 text-slate-500 dark:text-gray-400">
