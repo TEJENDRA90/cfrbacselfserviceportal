@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { HashRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { ThemeProvider, ThemeSwitcher } from './components/shared';
+import { CommonApiProvider } from './contexts/CommonApiContext';
 import { 
   Dashboard, 
   RoleManagement, 
@@ -125,7 +126,9 @@ const AppContent = () => {
 export default function App() {
     return (
         <ThemeProvider>
-            <AppContent />
+            <CommonApiProvider>
+                <AppContent />
+            </CommonApiProvider>
         </ThemeProvider>
     );
 }

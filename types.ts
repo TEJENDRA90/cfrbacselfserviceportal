@@ -17,7 +17,8 @@ export type RolePermission = {
 
 export type Role = {
   id: string;
-  name:string;
+  roleId?: string; // API UUID field
+  name: string;
   description: string;
   permissions: RolePermission[];
   writeRestrictionDays?: number | null; // null = No restriction
