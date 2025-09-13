@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button } from '../shared';
 import { ATTRIBUTE_VALUES } from '../../../constants';
 import type { DefaultAssignmentRule, Role, Attribute } from '../../../types';
-import apiService from '../../lib/service';
 import { useCommonApi } from '../../contexts/CommonApiContext';
 
 interface DefaultAssignmentEditorModalProps {
@@ -103,31 +102,7 @@ export const DefaultAssignmentEditorModal: React.FC<DefaultAssignmentEditorModal
         roleIds: formData.roleIds
       };
       
-      console.log('Creating default assignment rule with payload:', payload);
-      
-      if (rule) {
-        // Update existing rule - PUT call with exact payload structure
-        const updatePayload = {
-          ruleId: rule.id,
-          jobTitle: formData.jobTitle,
-          company: formData.company || "",
-          function: formData.function || "",
-          operation: formData.operation || "",
-          ship: formData.ship || "",
-          department: formData.department || "",
-          roleIds: formData.roleIds
-        };
-        console.log('Updating default assignment rule with payload:', updatePayload);
-        const response = await apiService.put('/rbac/defaultassignment', updatePayload);
-        console.log('Update default assignment rule response:', response);
-      } else {
-        // Create new rule - POST call
-        console.log('Creating default assignment rule with payload:', payload);
-        const response = await apiService.post('/rbac/defaultassignment', payload);
-        console.log('Create default assignment rule response:', response);
-      }
-      
-      // Call the onSave callback to update parent component
+      // Call the onSave callback to update parent component (parent will handle API calls)
       onSave({ ...payload, id: rule?.id || `rule-${Date.now()}` });
       onClose();
       

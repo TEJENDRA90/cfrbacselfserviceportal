@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, Button, StatusBadge, PlusIcon, MinusCircleIcon } from '../shared';
 import { ExceptionModal } from './ExceptionModal';
 import type { User, Role, UserRole } from '../../../types';
+import apiService from '../../lib/service';
 
 type Status = 'Active' | 'Expired' | 'Removed';
 
@@ -29,9 +30,47 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
 }) => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const user = useMemo(() => users.find(u => u.id === userId), [users, userId]);
+  const [apiUser, setApiUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const [addingExceptionForUser, setAddingExceptionForUser] = useState<User | null>(null);
+
+  // Fetch user data from API
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.get('/rbac/users');
+        console.log('Users API response:', response);
+        
+        if (response.data && response.data.data) {
+          const userData = response.data.data.find((u: any) => u.userId === userId);
+          if (userData) {
+            const transformedUser = {
+              id: userData.userId,
+              name: userData.name || 'Unknown',
+              jobTitle: userData.jobTitle || 'N/A',
+              department: userData.department || 'N/A',
+              roles: [] // Initialize empty roles array
+            };
+            setApiUser(transformedUser);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching user:', err);
+        setError('Failed to fetch user data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchUser();
+    }
+  }, [userId]);
+
+  const user = apiUser;
 
   const handleOpenAddModal = () => {
     if (user) {
@@ -76,6 +115,32 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
     }));
   };
   
+  if (loading) {
+    return (
+      <div className="text-center p-8">
+        <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-blue-500 hover:bg-blue-400 transition ease-in-out duration-150 cursor-not-allowed">
+          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Loading user data...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <h2 className="text-2xl font-bold text-red-500 dark:text-red-400">Error loading user</h2>
+        <p className="text-slate-500 dark:text-gray-400 mt-2">{error}</p>
+        <Link to="/exceptions" className="mt-4 inline-block">
+          <Button variant="secondary">Back to Exception Handling</Button>
+        </Link>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="text-center p-8">

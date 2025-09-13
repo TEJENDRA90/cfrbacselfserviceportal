@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { ThemeProvider, ThemeSwitcher } from './components/shared';
 import { CommonApiProvider } from './contexts/CommonApiContext';
@@ -14,6 +14,7 @@ import {
 } from './components/pages';
 import { MOCK_ROLES, MOCK_USERS, MOCK_DEFAULT_ASSIGNMENTS, MOCK_APPLICATIONS } from '../constants';
 import type { Role, User, DefaultAssignmentRule, Application } from '../types';
+import apiService from './lib/service';
 
 const NavigationLink = ({ to, children, icon }: { to: string; children: React.ReactNode; icon: React.ReactNode }) => {
   const location = useLocation();
@@ -38,7 +39,35 @@ const AppContent = () => {
     const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
     const [users, setUsers] = useState<User[]>(MOCK_USERS);
     const [defaultAssignments, setDefaultAssignments] = useState<DefaultAssignmentRule[]>(MOCK_DEFAULT_ASSIGNMENTS);
-  const [applications, setApplications] = useState<Application[]>(MOCK_APPLICATIONS);
+    const [applications, setApplications] = useState<Application[]>(MOCK_APPLICATIONS);
+    
+    // Fetch roles from API
+    useEffect(() => {
+        const fetchRoles = async () => {
+            try {
+                const response = await apiService.get('/rbac/roles');
+                console.log('Roles API response in App:', response);
+                
+                // Handle different possible response structures
+                let rolesData = [];
+                if (response.data && response.data.data) {
+                    rolesData = response.data.data;
+                } else if (response.data && Array.isArray(response.data)) {
+                    rolesData = response.data;
+                } else if (Array.isArray(response)) {
+                    rolesData = response;
+                }
+                
+                console.log('Processed roles data in App:', rolesData);
+                setRoles(rolesData);
+            } catch (err) {
+                console.error('Error fetching roles in App:', err);
+                // Keep using MOCK_ROLES if API fails
+            }
+        };
+
+        fetchRoles();
+    }, []);
   
     return (
       <HashRouter>

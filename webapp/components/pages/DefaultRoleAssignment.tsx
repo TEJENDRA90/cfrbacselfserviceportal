@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, Button, EditIcon, TrashIcon, PlusIcon, ConfirmationDialog } from '../shared';
 import { DefaultAssignmentEditorModal } from './DefaultAssignmentEditorModal';
 import type { DefaultAssignmentRule, Role } from '../../../types';
@@ -22,6 +22,7 @@ export const DefaultRoleAssignment: React.FC<DefaultRoleAssignmentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingRule, setDeletingRule] = useState<DefaultAssignmentRule | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isInitialMount = useRef(true);
 
   // Fetch default assignment rules from API
   const fetchDefaultAssignments = async () => {
@@ -57,7 +58,10 @@ export const DefaultRoleAssignment: React.FC<DefaultRoleAssignmentProps> = ({
 
   // Load default assignments on component mount
   useEffect(() => {
-    fetchDefaultAssignments();
+    if (isInitialMount.current) {
+      fetchDefaultAssignments();
+      isInitialMount.current = false;
+    }
   }, []);
 
   // Filter rules based on search term
@@ -109,8 +113,6 @@ export const DefaultRoleAssignment: React.FC<DefaultRoleAssignmentProps> = ({
         const response = await apiService.put('/rbac/defaultassignment', payload);
         console.log('Update default assignment rule response:', response);
         
-        // Update the rule in local state
-        setRules(rules.map(r => r.id === rule.id ? rule : r));
       } else {
         // Create new rule via API
         const payload = {
@@ -126,11 +128,10 @@ export const DefaultRoleAssignment: React.FC<DefaultRoleAssignmentProps> = ({
         
         const response = await apiService.post('/rbac/defaultassignment', payload);
         console.log('Create default assignment rule response:', response);
-        
-        // Add the new rule to local state
-        setRules([...rules, rule]);
       }
       
+      // Refetch data from API to show updated data in table
+      await fetchDefaultAssignments();
       handleCloseModal();
     } catch (err) {
       console.error('Error saving default assignment rule:', err);
@@ -155,8 +156,8 @@ export const DefaultRoleAssignment: React.FC<DefaultRoleAssignmentProps> = ({
       const response = await apiService.del(`/rbac/defaultassignment?ruleId=${deletingRule.id}`);
       console.log('Delete default assignment rule response:', response);
       
-      // Remove the rule from local state after successful deletion
-      setRules(rules.filter(r => r.id !== deletingRule.id));
+      // Refetch data from API to show updated data in table
+      await fetchDefaultAssignments();
       
       // Close the dialog
       setDeletingRule(null);

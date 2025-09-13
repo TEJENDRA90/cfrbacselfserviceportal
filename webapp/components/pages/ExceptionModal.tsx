@@ -32,7 +32,7 @@ export const ExceptionModal: React.FC<ExceptionModalProps> = ({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
-  const availableRoles = roles.filter(r => !user.roles.some(ur => ur.roleId === r.id && getRoleStatus(ur) === 'Active'));
+  const availableRoles = roles.filter(r => !user.roles.some(ur => ur.roleId === (r.roleId || r.id) && getRoleStatus(ur) === 'Active'));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +54,7 @@ export const ExceptionModal: React.FC<ExceptionModalProps> = ({
           <label htmlFor="role" className="block text-sm font-medium text-slate-700 dark:text-gray-300">Role to Assign</label>
           <select id="role" value={roleId} onChange={e => setRoleId(e.target.value)} className="mt-1 block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
             <option value="" disabled>Select a role</option>
-            {availableRoles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            {availableRoles.map(r => <option key={r.id || r.roleId} value={r.roleId || r.id}>{r.name || 'Unknown Role'}</option>)}
           </select>
         </div>
         <div>
