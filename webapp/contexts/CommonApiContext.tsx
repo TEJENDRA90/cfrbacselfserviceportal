@@ -9,6 +9,8 @@ interface CommonApiContextType {
   getCompanyIdList: () => Promise<any>;
   // VPP Get Job Title API
   getJobTitle: () => Promise<any>;
+  // VPP Day Type Access API
+  getDayTypeAccess: () => Promise<any>;
 }
 
 // Create the context
@@ -74,11 +76,23 @@ export const CommonApiProvider: React.FC<CommonApiProviderProps> = ({ children }
     }
   };
 
+  // VPP Day Type Access API function
+  const getDayTypeAccess = async () => {
+    try {
+      const response = await apiService.get('/vpp/planningValueDropDown?puserId=P000058');
+      return response.data.data;
+    } catch (error) {
+      console.error('Error calling getDayTypeAccess:', error);
+      throw error;
+    }
+  };
+
   // Context value
   const value: CommonApiContextType = {
     vpp2Filter,
     getCompanyIdList,
     getJobTitle,
+    getDayTypeAccess,
   };
 
   return (

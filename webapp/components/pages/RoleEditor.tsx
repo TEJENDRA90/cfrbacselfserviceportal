@@ -6,7 +6,7 @@ import type { Role, Attribute, Action } from '../../../types';
 import apiService from '../../lib/service';
 import { useCommonApi } from '../../contexts/CommonApiContext';
 
-const DAY_TYPE_OPTIONS = ["All", "W", "W1", "W-am", "W-pm", "WX", "V", "DO", "T", "TH", "X", "F", "NA"];
+// Day type options will be fetched from API
 
 interface RoleEditorProps {
   roles: Role[];
@@ -17,7 +17,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
   const { roleId } = useParams<{ roleId: string }>();
   const navigate = useNavigate();
   const isNewRole = !roleId;
-  const { vpp2Filter, getCompanyIdList, getJobTitle } = useCommonApi();
+  const { vpp2Filter, getCompanyIdList, getJobTitle, getDayTypeAccess } = useCommonApi();
 
   const initialRole = useMemo(() => {
     if (isNewRole) {
@@ -43,6 +43,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
   const [vppData, setVppData] = useState<any>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [applications, setApplications] = useState<any[]>([]);
+  const [dayTypeOptions, setDayTypeOptions] = useState<any[]>([]);
   
   // VPP Data arrays for dropdowns
   const [departments, setDepartments] = useState<any[]>([]);
@@ -101,11 +102,12 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
         setApiLoading(true);
         
         // Call APIs in parallel
-        const [jobTitlesResponse, companyListResponse, vppResponse, applicationsResponse] = await Promise.all([
+        const [jobTitlesResponse, companyListResponse, vppResponse, applicationsResponse, dayTypeResponse] = await Promise.all([
           getJobTitle(),
           getCompanyIdList(),
           vpp2Filter(),
-          apiService.get('/rbac/application')
+          apiService.get('/rbac/application'),
+          getDayTypeAccess()
         ]);
 
         // Set all the data
@@ -113,11 +115,20 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
         console.log('Company List response:', companyListResponse);
         console.log('VPP Filter response:', vppResponse);
         console.log('Applications response:', applicationsResponse);
+        console.log('Day Type Access response:', dayTypeResponse);
 
         setJobTitles(jobTitlesResponse.data || jobTitlesResponse || []);
         setCompanyList(companyListResponse.data || companyListResponse || []);
         setVppData(vppResponse.data || vppResponse || null);
         setApplications(applicationsResponse.data.data || applicationsResponse.data || []);
+        
+        // Set day type options from API response
+        const dayTypeData = dayTypeResponse.data || dayTypeResponse || [];
+        // Add "All" option at the beginning if it doesn't exist
+        const allOption = { Code: 'All', LookupName: 'All Day Types' };
+        const hasAllOption = dayTypeData.some((opt: any) => opt.Code === 'All');
+        const optionsWithAll = hasAllOption ? dayTypeData : [allOption, ...dayTypeData];
+        setDayTypeOptions(optionsWithAll);
         
         // Extract VPP data for dropdowns
         if (vppResponse.data || vppResponse) {
@@ -410,8 +421,12 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
             </div>
             <div>
               <label htmlFor="dayTypeAccess" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-1">Day Type Access</label>
-              <select id="dayTypeAccess" multiple value={formData.dayTypeAccess || []} onChange={e => handleDayTypeChange(e.target.selectedOptions)} className="block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24">
-                {DAY_TYPE_OPTIONS.map(opt => <option key={opt} value={opt} className={opt === 'All' ? 'font-bold text-blue-500 dark:text-blue-300' : ''}>{opt}</option>)}
+              <select id="dayTypeAccess" multiple value={formData.dayTypeAccess || []} onChange={e => handleDayTypeChange(e.target.selectedOptions)} className="block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24 text-slate-900 dark:text-white">
+                {dayTypeOptions.map(opt => (
+                  <option key={opt.Code} value={opt.Code} className={`${opt.Code === 'All' ? 'font-bold text-blue-500 dark:text-blue-300' : 'text-slate-900 dark:text-white'}`}>
+                    {opt.Code} - {opt.LookupName}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -459,20 +474,20 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ roles, setRoles }) => {
                       multiple 
                       value={p.values}
                       onChange={e => handleMultiSelectChange(p.attribute, Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))}
-                      className="block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
+                      className="block w-full bg-slate-50 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24 text-slate-900 dark:text-white"
                       disabled={apiLoading}
                     >
                       <option value="All" className="font-bold text-blue-500 dark:text-blue-300">All</option>
                       <option value="Dynamic" className="font-bold text-green-600 dark:text-green-300">Dynamic</option>
                       {hasVppData ? (
                         vppOptions.map((option, index) => (
-                          <option key={index} value={option.value} className="text-white dark:text-white">
+                          <option key={index} value={option.value} className="text-slate-900 dark:text-white">
                             {option.label}
                           </option>
                         ))
                       ) : (
                         ATTRIBUTE_VALUES[p.attribute as keyof typeof ATTRIBUTE_VALUES]?.map(val => (
-                          <option key={val} value={val}>{val}</option>
+                          <option key={val} value={val} className="text-slate-900 dark:text-white">{val}</option>
                         ))
                       )}
                     </select>

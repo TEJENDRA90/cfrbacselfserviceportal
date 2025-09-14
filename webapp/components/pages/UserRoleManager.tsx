@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Card, Button, StatusBadge, PlusIcon, MinusCircleIcon } from '../shared';
+import { Card, Button, StatusBadge, PlusIcon, MinusCircleIcon, ConfirmationDialog } from '../shared';
 import { ExceptionModal } from './ExceptionModal';
 import type { User, Role, UserRole } from '../../../types';
 import apiService from '../../lib/service';
@@ -31,42 +31,84 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const [apiUser, setApiUser] = useState<User | null>(null);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const [addingExceptionForUser, setAddingExceptionForUser] = useState<User | null>(null);
+  const [removingRole, setRemovingRole] = useState<UserRole | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
-  // Fetch user data from API
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.get('/rbac/users');
-        console.log('Users API response:', response);
-        
-        if (response.data && response.data.data) {
-          const userData = response.data.data.find((u: any) => u.userId === userId);
-          if (userData) {
-            const transformedUser = {
-              id: userData.userId,
-              name: userData.name || 'Unknown',
-              jobTitle: userData.jobTitle || 'N/A',
-              department: userData.department || 'N/A',
-              roles: [] // Initialize empty roles array
-            };
-            setApiUser(transformedUser);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching user:', err);
-        setError('Failed to fetch user data');
-      } finally {
-        setLoading(false);
+  // Fetch user data and roles from API
+  const fetchUserAndRoles = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch user data
+      const userResponse = await apiService.get('/rbac/users');
+      console.log('Users API response:', userResponse);
+      
+      let userData = null;
+      if (userResponse.data && userResponse.data.data) {
+        userData = userResponse.data.data.find((u: any) => u.userId === userId);
       }
-    };
+      
+      if (userData) {
+        const transformedUser = {
+          id: userData.userId,
+          name: userData.name || 'Unknown',
+          jobTitle: userData.jobTitle || 'N/A',
+          department: userData.department || 'N/A',
+          roles: [] // Will be populated from userRoles API
+        };
+        setApiUser(transformedUser);
+      }
 
+      // Fetch user roles
+      const rolesResponse = await apiService.get(`/rbac/userRoles?userId=${userId}`);
+      console.log('User roles API response:', rolesResponse);
+      
+      let rolesData = [];
+      if (rolesResponse.data && rolesResponse.data.data) {
+        rolesData = rolesResponse.data.data;
+      } else if (rolesResponse.data && Array.isArray(rolesResponse.data)) {
+        rolesData = rolesResponse.data;
+      } else if (Array.isArray(rolesResponse)) {
+        rolesData = rolesResponse;
+      }
+      
+      console.log('Processed user roles data:', rolesData);
+      
+      // Transform roles data to match UserRole interface
+      const transformedRoles = rolesData.map((role: any) => {
+        const transformed = {
+          roleId: role.ROLE_ID || role.roleId || role.id,
+          userRoleId: role.USER_ROLE_ID || role.userRoleId || role.id, // Add userRoleId for PUT operations
+          reason: role.REASON || role.reason || '',
+          startDate: role.START_DATE || role.startDate || role.effStartDate || '',
+          endDate: role.END_DATE || role.endDate || role.effEndDate || '',
+          assignedBy: role.ASSIGNED_BY || role.assignedBy || 'System',
+          assignedOn: role.ASSIGNED_ON ? role.ASSIGNED_ON.split(' ')[0] : (role.assignedOn || role.createdAt || new Date().toISOString().split('T')[0]),
+          removedOn: role.REMOVED_ON ? role.REMOVED_ON.split(' ')[0] : (role.removedOn || null)
+        };
+        console.log('Transformed role:', transformed);
+        return transformed;
+      });
+      
+      console.log('All transformed roles:', transformedRoles);
+      setUserRoles(transformedRoles);
+      
+    } catch (err) {
+      console.error('Error fetching user data:', err);
+      setError('Failed to fetch user data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (userId) {
-      fetchUser();
+      fetchUserAndRoles();
     }
   }, [userId]);
 
@@ -79,40 +121,57 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
   };
   const handleCloseAddModal = () => setAddingExceptionForUser(null);
 
-  const handleAddException = (userId: string, roleId: string, reason: string, startDate: string, endDate: string) => {
-    setUsers(currentUsers => currentUsers.map(u => {
-      if (u.id === userId) {
-        const newRole: UserRole = { 
-          roleId, 
-          reason, 
-          startDate, 
-          endDate, 
-          assignedBy: 'Admin', 
-          assignedOn: new Date().toISOString().split('T')[0] 
-        };
-        return { ...u, roles: [...u.roles, newRole] }
-      }
-      return u;
-    }));
+  const handleAddException = async (userId: string, roleId: string, reason: string, startDate: string, endDate: string) => {
+    // Refetch data from API instead of soft add
+    await fetchUserAndRoles();
     handleCloseAddModal();
   };
 
-  const handleRemoveRole = (userId: string, roleId: string, assignedOn: string) => {
-    if (!window.confirm("Are you sure you want to remove this role assignment? This action will be logged.")) return;
-    setUsers(currentUsers => currentUsers.map(u => {
-      if (u.id === userId) {
-        return {
-          ...u,
-          roles: u.roles.map(r => {
-            if (r.roleId === roleId && r.assignedOn === assignedOn) {
-              return { ...r, removedOn: new Date().toISOString().split('T')[0] };
-            }
-            return r;
-          })
-        }
-      }
-      return u;
-    }));
+  const handleRemoveRole = (userRole: UserRole) => {
+    setRemovingRole(userRole);
+  };
+
+  const confirmRemoveRole = async () => {
+    if (!removingRole) return;
+    
+    if (!removingRole.userRoleId) {
+      console.error('No userRoleId found for role:', removingRole);
+      setError('Error: Cannot remove role - missing user role ID');
+      setRemovingRole(null);
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      
+      // Construct payload for PUT call
+      const payload = {
+        userRoleId: removingRole.userRoleId,
+        removedOn: new Date().toISOString().split('T')[0] // Today's date in YYYY-MM-DD format
+      };
+
+      console.log('Remove role PUT payload:', payload);
+
+      // Make PUT call to remove role
+      const response = await apiService.put('/rbac/userRoles', payload);
+      console.log('Remove role PUT response:', response);
+
+      // Refetch data from API to get updated state
+      await fetchUserAndRoles();
+
+      // Close confirmation dialog
+      setRemovingRole(null);
+
+    } catch (err) {
+      console.error('Error removing role:', err);
+      setError('Failed to remove role. Please try again.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const cancelRemoveRole = () => {
+    setRemovingRole(null);
   };
   
   if (loading) {
@@ -172,14 +231,19 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
       <Card>
         <h4 className="text-lg font-semibold text-slate-700 dark:text-gray-200 uppercase mb-4 border-b border-slate-200 dark:border-gray-700 pb-2">Assigned Roles</h4>
         <ul className="text-sm space-y-3 p-1">
-          {user.roles.length > 0 ? [...user.roles].sort((a, b) => {
+          {userRoles.length > 0 ? [...userRoles].sort((a, b) => {
             const statusA = getRoleStatus(a);
             const statusB = getRoleStatus(b);
             if (statusA === 'Active' && statusB !== 'Active') return -1;
             if (statusA !== 'Active' && statusB === 'Active') return 1;
             return new Date(b.assignedOn).getTime() - new Date(a.assignedOn).getTime();
           }).map((r, index) => {
-            const role = roles.find(role => role.id === r.roleId);
+            const role = roles.find(role => 
+              (role.id === r.roleId) || 
+              (role.roleId === r.roleId) ||
+              (role.id === r.roleId) ||
+              (role.roleId === r.roleId)
+            );
             const status = getRoleStatus(r);
             return (
               <li key={`${r.roleId}-${r.assignedOn}-${index}`} className="p-4 bg-slate-50 dark:bg-gray-900/50 rounded-md border border-slate-200 dark:border-gray-700/50 flex flex-col md:flex-row justify-between items-start">
@@ -197,7 +261,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
                 </div>
                 {status === 'Active' && (
                   <div className="mt-3 md:mt-0 md:ml-4 flex-shrink-0">
-                    <Button onClick={() => handleRemoveRole(user.id, r.roleId, r.assignedOn)} variant="danger" className="!py-1 !px-3 text-xs">
+                    <Button onClick={() => handleRemoveRole(r)} variant="danger" className="!py-1 !px-3 text-xs">
                       <MinusCircleIcon className="w-4 h-4" /> Remove Role
                     </Button>
                   </div>
@@ -207,7 +271,19 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
           }) : <p className="text-slate-400 dark:text-gray-500 text-center py-4">No roles assigned to this user.</p>}
         </ul>
       </Card>
-      {addingExceptionForUser && <ExceptionModal user={addingExceptionForUser} roles={roles} onAdd={handleAddException} onClose={handleCloseAddModal} />}
+      {addingExceptionForUser && <ExceptionModal user={addingExceptionForUser} roles={roles} onAdd={handleAddException} onClose={handleCloseAddModal} onRefetch={fetchUserAndRoles} />}
+      {removingRole && (
+        <ConfirmationDialog
+          isOpen={!!removingRole}
+          onClose={cancelRemoveRole}
+          onConfirm={confirmRemoveRole}
+          title="Remove Role Assignment"
+          message={`Are you sure you want to remove this role assignment? This action will be logged.`}
+          confirmText="Remove Role"
+          cancelText="Cancel"
+          isLoading={isRemoving}
+        />
+      )}
     </div>
   );
 };

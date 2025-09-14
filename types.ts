@@ -29,6 +29,7 @@ export type Role = {
 
 export type UserRole = {
   roleId: string;
+  userRoleId?: string; // API UUID field for PUT/DELETE operations
   assignedOn: string;
   assignedBy: string;
   reason?: string;
